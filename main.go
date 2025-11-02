@@ -74,6 +74,11 @@ func main() {
 				},
 				Action: exportCommand,
 			},
+			{
+				Name:   "test-browser",
+				Usage:  "Test browser automation (opens browser and navigates to Ancestry.com)",
+				Action: testBrowserCommand,
+			},
 		},
 	}
 
@@ -97,4 +102,8 @@ func listTreesCommand(c *cli.Context) error {
 
 func exportCommand(c *cli.Context) error {
 	return fmt.Errorf("export command not yet implemented")
+}
+
+func testBrowserCommand(c *cli.Context) error {
+	return commands.TestBrowser(c)
 }
