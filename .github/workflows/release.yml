@@ -2,61 +2,188 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [ main ]
 
-permissions:
-  contents: write
+env:
+  GO_VERSION: '1.22'
 
 jobs:
   release:
-    name: Create Release
+    name: Build and Release
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        goos: [linux, darwin, windows]
-        goarch: [amd64, arm64]
-        exclude:
-          - goos: windows
-            goarch: arm64
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: write
+
     steps:
-    - name: Check out code
+    - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.22'
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
 
-    - name: Get version from tag
-      id: get_version
-      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-    - name: Build binary
-      env:
-        GOOS: ${{ matrix.goos }}
-        GOARCH: ${{ matrix.goarch }}
+    - name: Generate semantic version
+      id: version
       run: |
-        VERSION="${{ steps.get_version.outputs.VERSION }}"
-        BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-        LDFLAGS="-X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE}"
+        # Get the latest tag and increment patch version
+        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        echo "Latest tag: ${LATEST_TAG}"
 
-        if [ "${{ matrix.goos }}" = "windows" ]; then
-          BINARY_NAME="ancestrydl-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}.exe"
-          go build -ldflags "${LDFLAGS}" -o "${BINARY_NAME}" .
+        # Extract version numbers (remove 'v' prefix)
+        VERSION_NUM=${LATEST_TAG#v}
+
+        # Split version into parts
+        IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NUM"
+
+        # Check for conventional commit type and bump accordingly
+        COMMIT_MSG=$(git log -1 --pretty=%B)
+
+        if echo "$COMMIT_MSG" | grep -qE "^feat!|^BREAKING CHANGE"; then
+          # Major version bump for breaking changes
+          NEW_MAJOR=$((MAJOR + 1))
+          NEW_VERSION="v${NEW_MAJOR}.0.0"
+        elif echo "$COMMIT_MSG" | grep -qE "^feat"; then
+          # Minor version bump for features
+          NEW_MINOR=$((MINOR + 1))
+          NEW_VERSION="v${MAJOR}.${NEW_MINOR}.0"
         else
-          BINARY_NAME="ancestrydl-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}"
-          go build -ldflags "${LDFLAGS}" -o "${BINARY_NAME}" .
+          # Patch version bump for fixes and other changes
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
         fi
 
-        # Create checksum
-        sha256sum "${BINARY_NAME}" > "${BINARY_NAME}.sha256"
+        echo "version=${NEW_VERSION}" >> $GITHUB_OUTPUT
+        echo "Generated version: ${NEW_VERSION}"
 
-    - name: Upload Release Assets
+    - name: Check if tag already exists
+      id: check_tag
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        if git rev-parse --verify "refs/tags/${VERSION}" >/dev/null 2>&1; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+          echo "Tag ${VERSION} already exists, skipping release"
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "Tag ${VERSION} does not exist, proceeding with release"
+        fi
+
+    - name: Build multi-platform binaries
+      if: steps.check_tag.outputs.exists == 'false'
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        LDFLAGS="-s -w -X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE}"
+
+        mkdir -p dist
+
+        echo "Building Linux AMD64..."
+        GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="${LDFLAGS}" -o dist/ancestrydl-${VERSION}-linux-amd64 .
+
+        echo "Building Linux ARM64..."
+        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="${LDFLAGS}" -o dist/ancestrydl-${VERSION}-linux-arm64 .
+
+        echo "Building macOS AMD64..."
+        GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="${LDFLAGS}" -o dist/ancestrydl-${VERSION}-darwin-amd64 .
+
+        echo "Building macOS ARM64..."
+        GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="${LDFLAGS}" -o dist/ancestrydl-${VERSION}-darwin-arm64 .
+
+        echo "Building Windows AMD64..."
+        GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="${LDFLAGS}" -o dist/ancestrydl-${VERSION}-windows-amd64.exe .
+
+        # Create checksums
+        cd dist
+        sha256sum ancestrydl-* > checksums.txt
+        cd ..
+
+    - name: Create Git tag
+      if: steps.check_tag.outputs.exists == 'false'
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git tag -a ${VERSION} -m "Release ${VERSION}"
+        git push origin ${VERSION}
+        echo "Created and pushed tag: ${VERSION}"
+
+    - name: Generate release notes
+      if: steps.check_tag.outputs.exists == 'false'
+      id: release_notes
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+
+        # Get recent commits since last tag
+        LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        if [ -z "$LAST_TAG" ]; then
+          COMMITS=$(git log --oneline --no-merges -10)
+        else
+          COMMITS=$(git log --oneline --no-merges ${LAST_TAG}..HEAD)
+        fi
+
+        # Create release notes
+        cat > release_notes.md << EOF
+        ## Ancestry Downloader Release ${VERSION}
+
+        ### Recent Changes
+        \`\`\`
+        ${COMMITS}
+        \`\`\`
+
+        ### Downloads
+        Choose the appropriate binary for your platform:
+        - **Linux (AMD64)**: \`ancestrydl-${VERSION}-linux-amd64\`
+        - **Linux (ARM64)**: \`ancestrydl-${VERSION}-linux-arm64\`
+        - **macOS (Intel)**: \`ancestrydl-${VERSION}-darwin-amd64\`
+        - **macOS (Apple Silicon)**: \`ancestrydl-${VERSION}-darwin-arm64\`
+        - **Windows (AMD64)**: \`ancestrydl-${VERSION}-windows-amd64.exe\`
+
+        ### Installation
+        1. Download the appropriate binary for your platform
+        2. Make it executable (Linux/macOS): \`chmod +x ancestrydl-*\`
+        3. Run: \`./ancestrydl-*\` (or \`ancestrydl-*.exe\` on Windows)
+
+        ### Verification
+        Verify download integrity using the provided \`checksums.txt\` file:
+        \`\`\`bash
+        sha256sum -c checksums.txt
+        \`\`\`
+        EOF
+
+        echo "Release notes generated"
+
+    - name: Create GitHub Release
+      if: steps.check_tag.outputs.exists == 'false'
       uses: softprops/action-gh-release@v1
       with:
-        files: |
-          ancestrydl-*
+        tag_name: ${{ steps.version.outputs.version }}
+        name: Ancestry Downloader ${{ steps.version.outputs.version }}
+        body_path: release_notes.md
         draft: false
         prerelease: false
-        generate_release_notes: true
+        files: |
+          dist/ancestrydl-${{ steps.version.outputs.version }}-linux-amd64
+          dist/ancestrydl-${{ steps.version.outputs.version }}-linux-arm64
+          dist/ancestrydl-${{ steps.version.outputs.version }}-darwin-amd64
+          dist/ancestrydl-${{ steps.version.outputs.version }}-darwin-arm64
+          dist/ancestrydl-${{ steps.version.outputs.version }}-windows-amd64.exe
+          dist/checksums.txt
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Release Summary
+      if: steps.check_tag.outputs.exists == 'false'
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        echo "✅ Release ${VERSION} created successfully!"
+        echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/${VERSION}"
+        echo "📦 Artifacts uploaded:"
+        echo "  - Linux AMD64 & ARM64 binaries"
+        echo "  - macOS Intel & Apple Silicon binaries"
+        echo "  - Windows AMD64 binary"
+        echo "  - SHA256 checksums"
