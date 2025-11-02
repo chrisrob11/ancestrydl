@@ -88,7 +88,7 @@ func loginCommand(c *cli.Context) error {
 }
 
 func logoutCommand(c *cli.Context) error {
-	return fmt.Errorf("logout command not yet implemented")
+	return commands.Logout(c)
 }
 
 func listTreesCommand(c *cli.Context) error {
