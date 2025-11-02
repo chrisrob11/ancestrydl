@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/chrisrob11/ancestrydl/commands"
 	"github.com/urfave/cli/v2"
 )
 
@@ -83,7 +84,7 @@ func main() {
 
 // Command stubs - to be implemented in separate commits
 func loginCommand(c *cli.Context) error {
-	return fmt.Errorf("login command not yet implemented")
+	return commands.Login(c)
 }
 
 func logoutCommand(c *cli.Context) error {
