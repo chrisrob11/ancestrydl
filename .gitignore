@@ -41,7 +41,7 @@ Thumbs.db
 # Build output
 dist/
 build/
-ancestry-dl
+ancestrydl
 
 # Config and credentials
 .ancestry-dl/

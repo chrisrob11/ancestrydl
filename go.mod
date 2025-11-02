@@ -1,3 +1,3 @@
 module github.com/chrisrob11/ancestrydl
 
-go 1.25.1
+go 1.22
