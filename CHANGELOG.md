@@ -1,3 +1,9 @@
+## [1.0.1](https://github.com/chrisrob11/ancestrydl/compare/v1.0.0...v1.0.1) (2025-11-02)
+
+### Bug Fixes
+
+* configure semantic-release to only create tags, not releases ([e3fb8a0](https://github.com/chrisrob11/ancestrydl/commit/e3fb8a074ed52c71b3b458d31f8da0853ae3f745))
+
 ## 1.0.0 (2025-11-02)
 
 ### Features
