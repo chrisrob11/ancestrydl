@@ -2,11 +2,11 @@
 
 ## Phase 1: Foundation & Setup
 
-### Commit 1: Project Initialization
-- [ ] Initialize Go module (`go mod init`)
-- [ ] Create basic project structure (directories only)
-- [ ] Add `.gitignore` for Go projects
-- [ ] Create empty placeholder files for main packages
+### Commit 1: Project Initialization ✅
+- [x] Initialize Go module (`go mod init`)
+- [x] Create basic project structure (directories only)
+- [x] Add `.gitignore` for Go projects
+- [x] Create empty placeholder files for main packages
 
 **Files:**
 - `go.mod`
@@ -14,23 +14,28 @@
 - `main.go` (empty main function)
 - `pkg/ancestry/`, `commands/`, `pkg/storage/` directories
 
-### Commit 2: Makefile and CI Setup
-- [ ] Create `Makefile` with targets: build, test, lint, clean, install
-- [ ] Add golangci-lint configuration (`.golangci.yml`)
-- [ ] Create GitHub Actions workflow (`.github/workflows/ci.yml`)
-- [ ] Configure workflow to run tests and linting on push/PR
-- [ ] Test that `make build` works
+### Commit 2: Makefile and CI Setup ✅
+- [x] Create `Makefile` with targets: build, test, lint, clean, install
+- [x] Add golangci-lint configuration (`.golangci.yml`)
+- [x] Create GitHub Actions workflow (`.github/workflows/ci.yml`)
+- [x] Configure workflow to run tests and linting on push/PR
+- [x] Test that `make build` works
+- [x] Add `.tool-versions` for asdf
+- [x] Add release workflow for tagged versions
 
 **Files:**
 - `Makefile`
 - `.golangci.yml`
 - `.github/workflows/ci.yml`
+- `.github/workflows/release.yml`
+- `.tool-versions`
 
-### Commit 3: CLI Framework Setup
-- [ ] Install urfave/cli dependency
-- [ ] Implement basic CLI app structure in `main.go`
-- [ ] Add command stubs (login, logout, list-trees, export)
-- [ ] Test that `ancestry-dl --help` works
+### Commit 3: CLI Framework Setup ✅
+- [x] Install urfave/cli dependency
+- [x] Implement basic CLI app structure in `main.go`
+- [x] Add command stubs (login, logout, list-trees, export)
+- [x] Test that `ancestrydl --help` works
+- [x] Keep flags minimal (only required ones)
 
 **Files:**
 - `main.go` (complete with command structure)
