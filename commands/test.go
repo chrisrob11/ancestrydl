@@ -52,42 +52,8 @@ func TestBrowser(c *cli.Context) error {
 
 	// Test login if credentials provided
 	if testLogin {
-		noSubmit := c.Bool("no-submit")
-		twoFactorMethod := c.String("2fa")
-
-		if noSubmit {
-			fmt.Println("3. Testing login (filling fields only, NOT submitting)...")
-		} else {
-			fmt.Println("3. Testing login...")
-			if twoFactorMethod != "" {
-				fmt.Printf("   2FA method: %s\n", twoFactorMethod)
-			}
-		}
-
-		if err := client.LoginWithOptions(username, password, ancestry.LoginOptions{
-			SkipSubmit:      noSubmit,
-			TwoFactorMethod: twoFactorMethod,
-		}); err != nil {
-			fmt.Println("   ✗ Login failed!")
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
-		if noSubmit {
-			fmt.Println("   ✓ Form filled successfully (NOT submitted)")
-			fmt.Println("   → Check the browser to verify username and password are correct")
-		} else {
-			fmt.Println("   ✓ Login successful!")
-
-			// Verify logged in state
-			if client.IsLoggedIn() {
-				fmt.Println("   ✓ User is authenticated")
-			}
-
-			// Show current page after login
-			if page != nil {
-				info := page.MustInfo()
-				fmt.Printf("   ✓ Current URL: %s\n", info.URL)
-			}
+		if err := testLoginFlow(client, c); err != nil {
+			return err
 		}
 	}
 
@@ -103,6 +69,89 @@ func TestBrowser(c *cli.Context) error {
 
 	fmt.Println()
 	fmt.Println("Test completed! Closing browser...")
+
+	return nil
+}
+
+// testLoginFlow handles the login testing logic
+func testLoginFlow(client *ancestry.Client, c *cli.Context) error {
+	username := c.String("username")
+	password := c.String("password")
+	noSubmit := c.Bool("no-submit")
+	twoFactorMethod := c.String("2fa")
+
+	if noSubmit {
+		fmt.Println("3. Testing login (filling fields only, NOT submitting)...")
+	} else {
+		fmt.Println("3. Testing login...")
+		if twoFactorMethod != "" {
+			fmt.Printf("   2FA method: %s\n", twoFactorMethod)
+		}
+	}
+
+	if err := client.LoginWithOptions(username, password, ancestry.LoginOptions{
+		SkipSubmit:      noSubmit,
+		TwoFactorMethod: twoFactorMethod,
+	}); err != nil {
+		fmt.Println("   ✗ Login failed!")
+		return fmt.Errorf("authentication failed: %w", err)
+	}
+
+	if noSubmit {
+		fmt.Println("   ✓ Form filled successfully (NOT submitted)")
+		fmt.Println("   → Check the browser to verify username and password are correct")
+		return nil
+	}
+
+	return handleSuccessfulLogin(client)
+}
+
+// handleSuccessfulLogin handles post-login tasks including cookie extraction
+func handleSuccessfulLogin(client *ancestry.Client) error {
+	fmt.Println("   ✓ Login successful!")
+
+	// Verify logged in state
+	if client.IsLoggedIn() {
+		fmt.Println("   ✓ User is authenticated")
+	}
+
+	// Show current page after login
+	page := client.GetPage()
+	if page != nil {
+		info := page.MustInfo()
+		fmt.Printf("   ✓ Current URL: %s\n", info.URL)
+	}
+
+	// Extract and display cookies
+	return extractAndDisplayCookies(client)
+}
+
+// extractAndDisplayCookies extracts session cookies and displays information
+func extractAndDisplayCookies(client *ancestry.Client) error {
+	fmt.Println("\n4. Extracting session cookies...")
+	cookies, err := client.GetAncestrySessionCookies()
+	if err != nil {
+		fmt.Printf("   ✗ Failed to extract cookies: %v\n", err)
+		return nil // Non-fatal error
+	}
+
+	fmt.Printf("   ✓ Extracted %d cookie(s) from Ancestry.com\n", len(cookies))
+
+	// Display cookie names (not values for security)
+	for i, cookie := range cookies {
+		fmt.Printf("      [%d] %s (domain: %s, secure: %t, httpOnly: %t)\n",
+			i+1, cookie.Name, cookie.Domain, cookie.Secure, cookie.HTTPOnly)
+	}
+
+	// Serialize cookies for storage
+	cookiesJSON, err := ancestry.SerializeCookies(cookies)
+	if err != nil {
+		fmt.Printf("   ✗ Failed to serialize cookies: %v\n", err)
+		return nil // Non-fatal error
+	}
+
+	fmt.Printf("   ✓ Cookies serialized (%d bytes)\n", len(cookiesJSON))
+	fmt.Println("   → These cookies can be used for HTTP API requests")
 
 	return nil
 }

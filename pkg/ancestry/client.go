@@ -1,11 +1,14 @@
 package ancestry
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
+	"github.com/go-rod/rod/lib/proto"
 )
 
 const (
@@ -78,4 +81,72 @@ func (c *Client) Close() error {
 // GetPage returns the current page instance
 func (c *Client) GetPage() *rod.Page {
 	return c.page
+}
+
+// GetCookies retrieves all cookies from the current browser session
+func (c *Client) GetCookies() ([]*proto.NetworkCookie, error) {
+	if c.page == nil {
+		return nil, fmt.Errorf("no page available")
+	}
+
+	cookies, err := c.page.Cookies([]string{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cookies: %w", err)
+	}
+
+	return cookies, nil
+}
+
+// GetAncestrySessionCookies retrieves only cookies relevant to Ancestry.com authentication
+func (c *Client) GetAncestrySessionCookies() ([]*proto.NetworkCookie, error) {
+	allCookies, err := c.GetCookies()
+	if err != nil {
+		return nil, err
+	}
+
+	var ancestryCookies []*proto.NetworkCookie
+	for _, cookie := range allCookies {
+		// Filter for ancestry.com domain cookies
+		if cookie.Domain == ".ancestry.com" || cookie.Domain == "www.ancestry.com" || cookie.Domain == "ancestry.com" {
+			ancestryCookies = append(ancestryCookies, cookie)
+		}
+	}
+
+	return ancestryCookies, nil
+}
+
+// CookiesToHTTPCookies converts rod cookies to standard http.Cookie format
+func CookiesToHTTPCookies(rodCookies []*proto.NetworkCookie) []*http.Cookie {
+	httpCookies := make([]*http.Cookie, len(rodCookies))
+	for i, rc := range rodCookies {
+		httpCookies[i] = &http.Cookie{
+			Name:     rc.Name,
+			Value:    rc.Value,
+			Path:     rc.Path,
+			Domain:   rc.Domain,
+			Expires:  time.Unix(int64(rc.Expires), 0),
+			Secure:   rc.Secure,
+			HttpOnly: rc.HTTPOnly,
+			SameSite: http.SameSiteDefaultMode,
+		}
+	}
+	return httpCookies
+}
+
+// SerializeCookies converts cookies to JSON for storage
+func SerializeCookies(cookies []*proto.NetworkCookie) (string, error) {
+	data, err := json.Marshal(cookies)
+	if err != nil {
+		return "", fmt.Errorf("failed to serialize cookies: %w", err)
+	}
+	return string(data), nil
+}
+
+// DeserializeCookies converts JSON back to cookies
+func DeserializeCookies(data string) ([]*proto.NetworkCookie, error) {
+	var cookies []*proto.NetworkCookie
+	if err := json.Unmarshal([]byte(data), &cookies); err != nil {
+		return nil, fmt.Errorf("failed to deserialize cookies: %w", err)
+	}
+	return cookies, nil
 }

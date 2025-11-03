@@ -14,6 +14,8 @@ const (
 	UsernameKey = "username"
 	// PasswordKey is the key for storing the password
 	PasswordKey = "password"
+	// CookiesKey is the key for storing session cookies
+	CookiesKey = "cookies"
 )
 
 var (
@@ -92,10 +94,43 @@ func DeleteCredentials() error {
 		}
 	}
 
+	// Delete cookies
+	if err := keyring.Delete(ServiceName, CookiesKey); err != nil {
+		if err != keyring.ErrNotFound {
+			errs = append(errs, fmt.Errorf("failed to delete cookies: %w", err))
+		}
+	}
+
 	// If there were any errors, return them
 	if len(errs) > 0 {
 		return fmt.Errorf("error(s) deleting credentials: %v", errs)
 	}
 
 	return nil
+}
+
+// SaveCookies stores session cookies in the system keyring
+func SaveCookies(cookiesJSON string) error {
+	if cookiesJSON == "" {
+		return fmt.Errorf("cookies data is empty")
+	}
+
+	if err := keyring.Set(ServiceName, CookiesKey, cookiesJSON); err != nil {
+		return fmt.Errorf("failed to save cookies: %w", err)
+	}
+
+	return nil
+}
+
+// GetCookies retrieves stored session cookies from the system keyring
+func GetCookies() (string, error) {
+	cookies, err := keyring.Get(ServiceName, CookiesKey)
+	if err != nil {
+		if err == keyring.ErrNotFound {
+			return "", fmt.Errorf("no cookies found in keyring")
+		}
+		return "", fmt.Errorf("failed to retrieve cookies: %w", err)
+	}
+
+	return cookies, nil
 }
