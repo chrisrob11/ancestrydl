@@ -75,8 +75,28 @@ func main() {
 				Action: exportCommand,
 			},
 			{
-				Name:   "test-browser",
-				Usage:  "Test browser automation (opens browser and navigates to Ancestry.com)",
+				Name:  "test-browser",
+				Usage: "Test browser automation (opens browser and navigates to Ancestry.com)",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "username",
+						Aliases: []string{"u"},
+						Usage:   "Ancestry.com email/username (optional, for testing login)",
+					},
+					&cli.StringFlag{
+						Name:    "password",
+						Aliases: []string{"p"},
+						Usage:   "Ancestry.com password (optional, for testing login)",
+					},
+					&cli.StringFlag{
+						Name:  "2fa",
+						Usage: "2FA method to auto-select: 'email' or 'phone' (optional)",
+					},
+					&cli.BoolFlag{
+						Name:  "no-submit",
+						Usage: "Fill login form but don't submit (for testing/debugging)",
+					},
+				},
 				Action: testBrowserCommand,
 			},
 		},
