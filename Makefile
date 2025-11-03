@@ -3,10 +3,19 @@
 # Binary name
 BINARY_NAME=ancestrydl
 
+# Version information
+VERSION ?= dev
+BUILD_DATE := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
+
+# Build flags
+# Use -linkmode=external to ensure LC_UUID is generated on macOS
+LDFLAGS := -ldflags "-linkmode=external -X main.Version=$(VERSION) -X main.BuildDate=$(BUILD_DATE)"
+
 # Build the application
 build:
 	@echo "Building $(BINARY_NAME)..."
-	@go build -o $(BINARY_NAME) .
+	@rm -f $(BINARY_NAME)
+	go build $(LDFLAGS) -o $(BINARY_NAME) .
 
 # Run tests
 test:
