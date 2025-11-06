@@ -1,273 +1,72 @@
-# Ancestry Downloader - Implementation Plan
+# Ancestry Downloader
 
-## Phase 1: Foundation & Setup
+## 🎯 Purpose
 
-### Commit 1: Project Initialization ✅
-- [x] Initialize Go module (`go mod init`)
-- [x] Create basic project structure (directories only)
-- [x] Add `.gitignore` for Go projects
-- [x] Create empty placeholder files for main packages
+Download and preserve family tree data from Ancestry.com for **trees you can view but don't own**, where GEDCOM export functionality is unavailable.
 
-**Files:**
-- `go.mod`
-- `.gitignore`
-- `main.go` (empty main function)
-- `pkg/ancestry/`, `commands/`, `pkg/storage/` directories
+## ⚠️ Why No GEDCOM?
 
-### Commit 2: Makefile and CI Setup ✅
-- [x] Create `Makefile` with targets: build, test, lint, clean, install
-- [x] Add golangci-lint configuration (`.golangci.yml`)
-- [x] Create GitHub Actions workflow (`.github/workflows/ci.yml`)
-- [x] Configure workflow to run tests and linting on push/PR
-- [x] Test that `make build` works
-- [x] Add `.tool-versions` for asdf
-- [x] Add release workflow for tagged versions
+**GEDCOM export is owner-only.** Ancestry's GEDCOM export feature is only available to tree owners. If you're viewing a tree shared with you by a family member, there's no "Export Tree" button.
 
-**Files:**
-- `Makefile`
-- `.golangci.yml`
-- `.github/workflows/ci.yml`
-- `.github/workflows/release.yml`
-- `.tool-versions`
+This tool works around that limitation by accessing Ancestry's internal JSON APIs directly—the same APIs used by the web interface when you browse a tree. This approach works regardless of ownership.
 
-### Commit 3: CLI Framework Setup ✅
-- [x] Install urfave/cli dependency
-- [x] Implement basic CLI app structure in `main.go`
-- [x] Add command stubs (login, logout, list-trees, export)
-- [x] Test that `ancestrydl --help` works
-- [x] Keep flags minimal (only required ones)
+## ✅ Features
 
-**Files:**
-- `main.go` (complete with command structure)
-- `go.mod`, `go.sum` (with urfave/cli)
+### Core Functionality
+- **Authentication**: Login with 2FA support (phone/email/app)
+- **Tree Discovery**: List all trees you have access to
+- **Data Extraction**: Download complete tree data including:
+  - People (names, dates, relationships)
+  - Life events with dates and places
+  - Family relationships (parents, spouses, children, siblings)
+  - Photos and documents
+- **Smart Processing**:
+  - Relationship inference from family connections
+  - Event type inference from family events
+  - Place extraction from nested structures
+- **Output**:
+  - Interactive HTML viewer (offline, self-contained)
+  - JSON data files for programmatic access
+  - Organized media downloads
 
-### Commit 4: Keyring Integration
-- [ ] Add go-keyring dependency
-- [ ] Create `pkg/config/credentials.go`
-- [ ] Implement functions: `SaveCredentials()`, `GetCredentials()`, `DeleteCredentials()`
-- [ ] Add basic error handling
+### API Endpoints
+- `/api/trees` - List accessible trees
+- `/api/treeviewer/tree/allpersons/{treeId}` - Get all persons (paginated)
+- `/api/treeviewer/tree/newfamilyview/{treeId}` - Get relationships and events
+- `/api/media/viewer/v1/trees/{treeId}/people/{personId}` - Get person media
+- `/facts/page/{treeId}/person/{personId}` - Get detailed person facts
 
-**Files:**
-- `pkg/config/credentials.go`
-- `go.mod`, `go.sum` (with keyring dependency)
+### Commands
+- `login` - Authenticate with 2FA support
+- `logout` - Remove stored credentials
+- `list-trees` - List all accessible trees
+- `list-people` - List all people in a tree
+- `config` - Manage configuration (default tree)
+- `download-tree` - Complete tree download
+- `test-browser` - Test browser automation
 
-### Commit 5: Login Command Implementation
-- [ ] Implement `commands/login.go`
-- [ ] Accept username/password flags
-- [ ] Validate inputs
-- [ ] Store in keyring
-- [ ] Print success/error messages
+## 🚧 Known Limitations
 
-**Files:**
-- `commands/login.go`
-- Update `main.go` to wire up login command
+### By Design
+1. **No GEDCOM Output**: This tool does not generate GEDCOM files. Use the downloaded JSON data or HTML viewer instead.
+2. **API Dependency**: Relies on Ancestry's internal APIs which may change without notice.
+3. **Authentication Required**: Requires valid Ancestry.com credentials and appropriate permissions.
+4. **Rate Limiting**: Large trees (1000+ people) may take time to download due to respectful rate limiting.
 
-### Commit 6: Logout Command Implementation
-- [ ] Implement `commands/logout.go`
-- [ ] Remove credentials from keyring
-- [ ] Handle case where no credentials exist
-- [ ] Print confirmation messages
+### Technical
+1. **Browser Requirement**: Chrome/Chromium must be installed for authentication.
+2. **Session Expiration**: Cookies expire after days/weeks; re-login required periodically.
+3. **Privacy Restrictions**: Living persons may have limited visibility based on Ancestry's privacy settings.
 
-**Files:**
-- `commands/logout.go`
-- Update `main.go` to wire up logout command
+## 🔧 Technical Stack
 
-## Phase 2: Browser Automation
-
-### Commit 7: Browser Automation Setup
-- [ ] Add go-rod dependency
-- [ ] Create `pkg/ancestry/client.go` with basic browser setup
-- [ ] Implement `NewClient()` function
-- [ ] Add function to launch browser and navigate to Ancestry.com
-- [ ] Test basic navigation (no authentication yet)
-
-**Files:**
-- `pkg/ancestry/client.go`
-- `go.mod`, `go.sum` (with go-rod)
-
-### Commit 8: Authentication Flow
-- [ ] Create `pkg/ancestry/auth.go`
-- [ ] Implement `Login(username, password)` function
-- [ ] Handle login form submission
-- [ ] Detect successful/failed login
-- [ ] Add error handling for common issues
-
-**Files:**
-- `pkg/ancestry/auth.go`
-- Update `pkg/ancestry/client.go` if needed
-
-### Commit 9: List Trees Command - Part 1
-- [ ] Implement `commands/list.go`
-- [ ] Retrieve credentials from keyring
-- [ ] Initialize browser client
-- [ ] Authenticate to Ancestry.com
-
-**Files:**
-- `commands/list.go`
-- Update `main.go` to wire up command
-
-### Commit 10: List Trees Command - Part 2
-- [ ] Navigate to trees page after authentication
-- [ ] Scrape tree list (ID, name, person count)
-- [ ] Format and display results to user
-- [ ] Handle case where user has no trees
-
-**Files:**
-- Update `commands/list.go`
-- Update `pkg/ancestry/client.go` with tree listing methods
-
-## Phase 3: GEDCOM Export
-
-### Commit 11: Export Command Structure
-- [ ] Implement `commands/export.go` skeleton
-- [ ] Add all flags (tree-id, output, media-types, slow, resume, dry-run, delay)
-- [ ] Validate inputs
-- [ ] Create output directory structure
-
-**Files:**
-- `commands/export.go`
-- Update `main.go` to wire up command
-
-### Commit 12: GEDCOM Parser Integration
-- [ ] Add GEDCOM parser library dependency
-- [ ] Create `pkg/gedcom/parser.go`
-- [ ] Implement `Parse(filename)` function
-- [ ] Extract individual IDs from parsed GEDCOM
-
-**Files:**
-- `pkg/gedcom/parser.go`
-- `go.mod`, `go.sum` (with GEDCOM library)
-
-### Commit 13: GEDCOM Export Automation
-- [ ] Create `pkg/ancestry/gedcom.go`
-- [ ] Implement browser automation to navigate to export page
-- [ ] Click through export wizard
-- [ ] Download GEDCOM file to output directory
-
-**Files:**
-- `pkg/ancestry/gedcom.go`
-- Update `commands/export.go` to use GEDCOM export
-
-### Commit 14: Progress Bar Integration
-- [ ] Add progressbar dependency
-- [ ] Create progress bar for GEDCOM export
-- [ ] Add progress bar for person iteration (preparation for media download)
-
-**Files:**
-- Update `commands/export.go` with progress bars
-- `go.mod`, `go.sum` (with progressbar)
-
-## Phase 4: Media Download
-
-### Commit 15: Media Scraping Foundation
-- [ ] Create `pkg/ancestry/media.go`
-- [ ] Implement function to navigate to person profile
-- [ ] Identify media elements on page
-- [ ] Extract media URLs and metadata
-
-**Files:**
-- `pkg/ancestry/media.go`
-
-### Commit 16: Media Download Implementation
-- [ ] Implement media download function
-- [ ] Add systematic naming: `{personID}_{mediaType}_{index}.{ext}`
-- [ ] Save files to appropriate media subdirectories
-- [ ] Handle download errors/retries
-
-**Files:**
-- Update `pkg/ancestry/media.go`
-- Create `pkg/storage/organizer.go` for file organization
-
-### Commit 17: Metadata Generation
-- [ ] Create metadata JSON for each downloaded media item
-- [ ] Include: person ID, media type, source URL, download timestamp
-- [ ] Save per-person metadata files
-
-**Files:**
-- Update `pkg/ancestry/media.go`
-- Update `pkg/storage/organizer.go`
-
-### Commit 18: Manifest Generation
-- [ ] Create `manifest.json` generation
-- [ ] Map people to their media files
-- [ ] Include GEDCOM data references
-- [ ] Save manifest to output directory
-
-**Files:**
-- Update `pkg/storage/organizer.go`
-- Update `commands/export.go` to generate manifest
-
-## Phase 5: Polish & Features
-
-### Commit 19: Rate Limiting
-- [ ] Implement configurable delays between requests
-- [ ] Add `--slow` flag support (5+ second delays)
-- [ ] Add `--delay` flag for custom timing
-- [ ] Respect rate limit responses
-
-**Files:**
-- Update `pkg/ancestry/client.go` with rate limiting
-- Update `commands/export.go` to pass delay settings
-
-### Commit 20: Resume Capability
-- [ ] Create progress state file (`.ancestry-dl-progress.json`)
-- [ ] Track downloaded files
-- [ ] Skip already-downloaded items on resume
-- [ ] Clean up state file on completion
-
-**Files:**
-- Create `pkg/storage/state.go`
-- Update `commands/export.go` with resume logic
-
-### Commit 21: Dry Run Mode
-- [ ] Implement `--dry-run` flag
-- [ ] Show what would be downloaded without actually downloading
-- [ ] Display estimated file counts and sizes if possible
-
-**Files:**
-- Update `commands/export.go` with dry-run logic
-
-### Commit 22: Error Handling & Logging
-- [ ] Add comprehensive error handling throughout
-- [ ] Create `logs/` directory and `download.log`
-- [ ] Log all operations with timestamps
-- [ ] Add retry logic for failed downloads
-
-**Files:**
-- Create logging utility
-- Update all command files with proper error handling
-
-### Commit 23: Configuration File Support
-- [ ] Create `~/.ancestry-dl/config.yaml` support
-- [ ] Load default settings from config
-- [ ] Allow CLI flags to override config
-- [ ] Document config options
-
-**Files:**
-- Create `pkg/config/config.go`
-- Update commands to read from config
-
-### Commit 24: Documentation
-- [ ] Create comprehensive README.md
-- [ ] Add usage examples
-- [ ] Document all commands and flags
-- [ ] Add responsible use guidelines
-- [ ] Include setup instructions
-
-**Files:**
-- `README.md`
-- `LICENSE` (MIT)
-
-### Commit 25: User Agent & Best Practices
-- [ ] Set proper User-Agent header
-- [ ] Add request headers for transparency
-- [ ] Final polish on automation behavior
-
-**Files:**
-- Update `pkg/ancestry/client.go`
+- **Language**: Go 1.21+
+- **Browser Automation**: [go-rod](https://github.com/go-rod/rod)
+- **Secure Storage**: System keyring integration
+- **Architecture**: Direct API calls, no GEDCOM parsing
 
 ---
 
-## Total: 25 Commits
+**Status**: ✅ **Production Ready**
 
-Each commit should be buildable and testable independently where possible.
+The tool is feature-complete for downloading and preserving family tree data from Ancestry.com trees you can view but don't own.

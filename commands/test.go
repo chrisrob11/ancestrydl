@@ -1,7 +1,10 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/chrisrob11/ancestrydl/pkg/ancestry"
@@ -35,12 +38,16 @@ func TestBrowser(c *cli.Context) error {
 	}()
 	fmt.Println("   ✓ Browser launched successfully")
 
-	// Navigate to Ancestry.com
-	fmt.Println("2. Navigating to Ancestry.com...")
-	if err := client.NavigateToAncestry(); err != nil {
-		return fmt.Errorf("failed to navigate: %w", err)
+	// Setup network capture if requested
+	captureNetwork := c.Bool("capture-network")
+	if captureNetwork {
+		fmt.Println("   ✓ Network capture enabled")
 	}
-	fmt.Println("   ✓ Navigation successful")
+
+	// Navigate to Ancestry.com
+	if err := navigateAndSetupCapture(client, captureNetwork); err != nil {
+		return err
+	}
 
 	// Get page info
 	page := client.GetPage()
@@ -65,10 +72,39 @@ func TestBrowser(c *cli.Context) error {
 	fmt.Println()
 	fmt.Printf("Browser will stay open for %d seconds so you can see it...\n", waitTime)
 	fmt.Println("Press Ctrl+C to close early")
+	fmt.Println()
+	if captureNetwork {
+		fmt.Println("Navigate to 'My Trees' or other pages to capture API requests...")
+	}
 	time.Sleep(time.Duration(waitTime) * time.Second)
+
+	// Display and save captured network requests
+	if captureNetwork {
+		if err := displayCapturedRequests(client, c); err != nil {
+			fmt.Printf("Warning: %v\n", err)
+		}
+	}
 
 	fmt.Println()
 	fmt.Println("Test completed! Closing browser...")
+
+	return nil
+}
+
+// navigateAndSetupCapture navigates to Ancestry and sets up network capture
+func navigateAndSetupCapture(client *ancestry.Client, captureEnabled bool) error {
+	fmt.Println("2. Navigating to Ancestry.com...")
+	if err := client.NavigateToAncestry(); err != nil {
+		return fmt.Errorf("failed to navigate: %w", err)
+	}
+	fmt.Println("   ✓ Navigation successful")
+
+	// Enable network capture after navigation
+	if captureEnabled {
+		if err := client.EnableNetworkCapture(); err != nil {
+			fmt.Printf("   ✗ Warning: Failed to enable network capture: %v\n", err)
+		}
+	}
 
 	return nil
 }
@@ -154,4 +190,88 @@ func extractAndDisplayCookies(client *ancestry.Client) error {
 	fmt.Println("   → These cookies can be used for HTTP API requests")
 
 	return nil
+}
+
+// displayCapturedRequests displays and optionally saves captured network requests
+func displayCapturedRequests(client *ancestry.Client, c *cli.Context) error {
+	requests := client.GetCapturedRequests()
+
+	fmt.Println("\n=== CAPTURED NETWORK REQUESTS ===")
+	fmt.Printf("Total requests captured: %d\n\n", len(requests))
+
+	if len(requests) == 0 {
+		fmt.Println("No API requests were captured.")
+		fmt.Println("Try navigating to 'My Trees' or other pages to see API calls.")
+		return nil
+	}
+
+	// Display each request
+	for i, req := range requests {
+		fmt.Printf("[%d] %s %s\n", i+1, req.Method, req.URL)
+		fmt.Printf("    Status: %d\n", req.StatusCode)
+		fmt.Printf("    Content-Type: %s\n", req.ContentType)
+		fmt.Printf("    Timestamp: %s\n", req.Timestamp.Format("15:04:05"))
+
+		// Show request body if present (truncated)
+		if req.RequestBody != "" {
+			truncated := truncateString(req.RequestBody, 100)
+			fmt.Printf("    Request: %s\n", truncated)
+		}
+
+		// Show response body preview (truncated)
+		if req.ResponseBody != "" {
+			// Try to pretty-print JSON
+			var jsonData interface{}
+			if err := json.Unmarshal([]byte(req.ResponseBody), &jsonData); err == nil {
+				prettyJSON, _ := json.MarshalIndent(jsonData, "    ", "  ")
+				truncated := truncateString(string(prettyJSON), 200)
+				fmt.Printf("    Response: %s\n", truncated)
+			} else {
+				truncated := truncateString(req.ResponseBody, 200)
+				fmt.Printf("    Response: %s\n", truncated)
+			}
+		}
+		fmt.Println()
+	}
+
+	// Save to file if output flag is set
+	outputFile := c.String("output")
+	if outputFile != "" {
+		if err := saveCapturedRequests(requests, outputFile); err != nil {
+			return fmt.Errorf("failed to save captured requests: %w", err)
+		}
+		fmt.Printf("✓ Saved %d requests to %s\n", len(requests), outputFile)
+	}
+
+	return nil
+}
+
+// saveCapturedRequests saves captured requests to a JSON file
+func saveCapturedRequests(requests []*ancestry.CapturedRequest, filename string) error {
+	data, err := json.MarshalIndent(requests, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal requests: %w", err)
+	}
+
+	if err := os.WriteFile(filename, data, 0644); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+
+	return nil
+}
+
+// truncateString truncates a string to maxLen and adds "..." if truncated
+func truncateString(s string, maxLen int) string {
+	// Remove newlines and extra spaces
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\t", " ")
+	for strings.Contains(s, "  ") {
+		s = strings.ReplaceAll(s, "  ", " ")
+	}
+	s = strings.TrimSpace(s)
+
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

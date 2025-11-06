@@ -39,6 +39,10 @@ func main() {
 						Usage:    "Ancestry.com password",
 						Required: true,
 					},
+					&cli.StringFlag{
+						Name:  "2fa",
+						Usage: "2FA method to auto-select: 'email' or 'phone' (if account has 2FA enabled)",
+					},
 				},
 				Action: loginCommand,
 			},
@@ -55,24 +59,50 @@ func main() {
 				Action:  listTreesCommand,
 			},
 			{
-				Name:    "export",
-				Aliases: []string{"e"},
-				Usage:   "Export a family tree with all media",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:     "tree-id",
-						Aliases:  []string{"t"},
-						Usage:    "Ancestry tree ID",
-						Required: true,
+				Name:      "list-people",
+				Aliases:   []string{"lp"},
+				Usage:     "List all people in a family tree",
+				ArgsUsage: "<tree-id>",
+				Action:    listPeopleCommand,
+			},
+			{
+				Name:    "config",
+				Aliases: []string{"cfg"},
+				Usage:   "Manage configuration settings",
+				Subcommands: []*cli.Command{
+					{
+						Name:      "set-default-tree",
+						Usage:     "Set the default tree ID",
+						ArgsUsage: "<tree-id>",
+						Action:    setDefaultTreeCommand,
 					},
+					{
+						Name:    "show",
+						Aliases: []string{"s"},
+						Usage:   "Show current configuration",
+						Action:  showConfigCommand,
+					},
+				},
+			},
+			{
+				Name:      "download-tree",
+				Aliases:   []string{"dl"},
+				Usage:     "Download complete family tree with all data and media",
+				ArgsUsage: "[tree-id]",
+				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:    "output",
 						Aliases: []string{"o"},
 						Usage:   "Output directory",
 						Value:   "./ancestry-export",
 					},
+					&cli.BoolFlag{
+						Name:    "verbose",
+						Aliases: []string{"v"},
+						Usage:   "Enable verbose logging (writes all HTTP requests/responses to http_log.txt)",
+					},
 				},
-				Action: exportCommand,
+				Action: downloadTreeCommand,
 			},
 			{
 				Name:  "test-browser",
@@ -96,6 +126,15 @@ func main() {
 						Name:  "no-submit",
 						Usage: "Fill login form but don't submit (for testing/debugging)",
 					},
+					&cli.BoolFlag{
+						Name:  "capture-network",
+						Usage: "Capture and display all API network requests",
+					},
+					&cli.StringFlag{
+						Name:    "output",
+						Aliases: []string{"o"},
+						Usage:   "Save captured network requests to file (JSON format)",
+					},
 				},
 				Action: testBrowserCommand,
 			},
@@ -117,11 +156,23 @@ func logoutCommand(c *cli.Context) error {
 }
 
 func listTreesCommand(c *cli.Context) error {
-	return fmt.Errorf("list-trees command not yet implemented")
+	return commands.ListTrees(c)
 }
 
-func exportCommand(c *cli.Context) error {
-	return fmt.Errorf("export command not yet implemented")
+func listPeopleCommand(c *cli.Context) error {
+	return commands.ListPeople(c)
+}
+
+func setDefaultTreeCommand(c *cli.Context) error {
+	return commands.SetDefaultTree(c)
+}
+
+func showConfigCommand(c *cli.Context) error {
+	return commands.ShowConfig(c)
+}
+
+func downloadTreeCommand(c *cli.Context) error {
+	return commands.DownloadTree(c)
 }
 
 func testBrowserCommand(c *cli.Context) error {
