@@ -49,11 +49,13 @@ ancestrydl
 # Logs
 logs/
 *.log
+http_log.txt
 
 # Progress state files
 .ancestry-dl-progress.json
 
 # Downloaded data (for testing)
 ancestry-export/
+export/
 output/
 backup/
