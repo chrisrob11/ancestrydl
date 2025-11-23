@@ -317,10 +317,6 @@ func generateHTMLTemplate(peopleJSON, metadataJSON string) string {
             `+"`"+`;
         }
 
-        function sanitizeFilename(str) {
-            return str.replace(/[^a-zA-Z0-9-]/g, '-');
-        }
-
         function displayPeople(people) {
             const grid = document.getElementById('people-grid');
 
@@ -331,7 +327,6 @@ func generateHTMLTemplate(peopleJSON, metadataJSON string) string {
 
             grid.innerHTML = people.map(person => {
                 const personId = person.personId || 'unknown';
-                const sanitizedId = sanitizeFilename(personId);
                 const name = person.fullName || 'Unknown';
                 const media = person.media; // Media is now embedded in person object
 

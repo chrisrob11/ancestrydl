@@ -250,10 +250,6 @@ func generatePersonPageTemplate(peopleJSON, metadataJSON string) string {
             throw new Error('Person not found');
         }
 
-        function sanitizeFilename(str) {
-            return str.replace(/[^a-zA-Z0-9-]/g, '-');
-        }
-
         // Update page title
         document.title = (person.fullName || 'Unknown') + ' - Family Tree';
 
