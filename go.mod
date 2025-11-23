@@ -1,12 +1,13 @@
 module github.com/chrisrob11/ancestrydl
 
-go 1.22
+go 1.24.0
 
 require (
 	github.com/go-rod/rod v0.116.2
 	github.com/urfave/cli/v2 v2.27.7
 	github.com/zalando/go-keyring v0.2.5
 	golang.org/x/net v0.23.0
+	golang.org/x/text v0.31.0
 )
 
 require (
