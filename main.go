@@ -105,6 +105,51 @@ func main() {
 				Action: downloadTreeCommand,
 			},
 			{
+				Name:      "download-record",
+				Aliases:   []string{"dr"},
+				Usage:     "Download a specific record",
+				ArgsUsage: "",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "tree-id",
+						Usage: "The ID of the tree to download the record from",
+					},
+					&cli.StringFlag{
+						Name:  "person-id",
+						Usage: "The ID of the person to download the record for",
+					},
+					&cli.StringFlag{
+						Name:  "source-id",
+						Usage: "The ID of the source to download the record from",
+					},
+					&cli.BoolFlag{
+						Name:    "verbose",
+						Aliases: []string{"v"},
+						Usage:   "Enable verbose logging (writes all HTTP requests/responses to http_log.txt)",
+					},
+				},
+				Action: downloadRecordCommand,
+			},
+			{
+				Name:      "download-sources",
+				Aliases:   []string{"ds"},
+				Usage:     "Download all sources for all people in a tree",
+				ArgsUsage: "[tree-id]",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "output",
+						Aliases: []string{"o"},
+						Usage:   "Output directory",
+					},
+					&cli.BoolFlag{
+						Name:    "verbose",
+						Aliases: []string{"v"},
+						Usage:   "Enable verbose logging",
+					},
+				},
+				Action: downloadSourcesCommand,
+			},
+			{
 				Name:  "test-browser",
 				Usage: "Test browser automation (opens browser and navigates to Ancestry.com)",
 				Flags: []cli.Flag{
@@ -173,6 +218,14 @@ func showConfigCommand(c *cli.Context) error {
 
 func downloadTreeCommand(c *cli.Context) error {
 	return commands.DownloadTree(c)
+}
+
+func downloadRecordCommand(c *cli.Context) error {
+	return commands.DownloadRecord(c)
+}
+
+func downloadSourcesCommand(c *cli.Context) error {
+	return commands.DownloadSources(c)
 }
 
 func testBrowserCommand(c *cli.Context) error {

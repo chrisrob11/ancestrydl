@@ -76,6 +76,6 @@ func (t *loggingTransport) log(msg string) {
 	_, err := t.logFile.WriteString(msg)
 	if err != nil {
 		// Handle the error, e.g., log it to stderr
-		fmt.Fprintf(os.Stderr, "--- Failed to write to log file: %v ---\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "--- Failed to write to log file: %v ---\n", err)
 	}
 }
