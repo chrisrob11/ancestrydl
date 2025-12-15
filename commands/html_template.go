@@ -169,6 +169,60 @@ func generateHTMLTemplate(peopleJSON, metadataJSON string) string {
             background: #9b59b6;
         }
 
+        .badge.record {
+            background: #f39c12;
+        }
+
+        .sources-preview {
+            margin-top: 15px;
+            border-top: 1px solid #ecf0f1;
+            padding-top: 15px;
+        }
+
+        .sources-preview h4 {
+            color: #7f8c8d;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .source-list-compact {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .source-item-compact {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            margin-bottom: 6px;
+            background: #fafafa;
+            border-radius: 4px;
+            font-size: 0.85em;
+            border-left: 3px solid #f39c12;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .source-item-compact:hover {
+            background: #fff8e1;
+        }
+
+        .source-icon-small {
+            font-size: 18px;
+            margin-right: 8px;
+        }
+
+        .source-name-compact {
+            flex: 1;
+            color: #2c3e50;
+            font-weight: 500;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
         .no-results {
             text-align: center;
             padding: 40px;
@@ -374,6 +428,37 @@ func generateHTMLTemplate(peopleJSON, metadataJSON string) string {
                     });
                 }
 
+                // Build sources preview HTML
+                const recordImages = person.recordImages || [];
+                const recordImagesHTML = recordImages.length > 0 ? `+"`"+`
+                    <div class="sources-preview">
+                        <h4>📚 Sources</h4>
+                        <ul class="source-list-compact">
+                            ${recordImages.slice(0, 3).map(record => {
+                                const recordMetadata = [record.sourceTitle, 'Citation ID: ' + record.citationId].filter(x => x).join(' | ');
+
+                                // Determine icon based on source type
+                                let icon = '📄';
+                                if (record.sourceTitle && record.sourceTitle.includes('Census')) {
+                                    icon = '👥';
+                                } else if (record.sourceTitle && (record.sourceTitle.includes('Marriage') || record.sourceTitle.includes('Birth') || record.sourceTitle.includes('Death'))) {
+                                    icon = '📋';
+                                } else if (record.sourceTitle && record.sourceTitle.includes('Tree')) {
+                                    icon = '🌳';
+                                }
+
+                                return `+"`"+`
+                                    <li class="source-item-compact" onclick='event.stopPropagation(); openLightbox("${record.filePath}", ${JSON.stringify(recordMetadata).replace(/'/g, "&apos;")})'>
+                                        <span class="source-icon-small">${icon}</span>
+                                        <span class="source-name-compact" title="${record.sourceTitle}">${record.sourceTitle}</span>
+                                    </li>
+                                `+"`"+`;
+                            }).join('')}
+                            ${recordImages.length > 3 ? `+"`"+`<li style="text-align: center; color: #666; font-size: 0.85em; padding: 5px;">+${recordImages.length - 3} more...</li>`+"`"+` : ''}
+                        </ul>
+                    </div>
+                `+"`"+` : '';
+
                 // Get relationships (now embedded in person object)
                 let relationshipsHTML = '';
                 if (person.parents && person.parents.length > 0) {
@@ -396,7 +481,9 @@ func generateHTMLTemplate(peopleJSON, metadataJSON string) string {
                         ${person.isLiving ? '<span class="badge living">Living</span>' : ''}
                         ${photoCount > 0 ? `+"`"+`<span class="badge photo">${photoCount} photo${photoCount > 1 ? 's' : ''}</span>`+"`"+` : ''}
                         ${documentCount > 0 ? `+"`"+`<span class="badge document">${documentCount} document${documentCount > 1 ? 's' : ''}</span>`+"`"+` : ''}
+                        ${recordImages.length > 0 ? `+"`"+`<span class="badge record">${recordImages.length} record${recordImages.length > 1 ? 's' : ''}</span>`+"`"+` : ''}
                         ${mediaHTML}
+                        ${recordImagesHTML}
                     </div>
                 `+"`"+`;
             }).join('');

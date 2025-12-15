@@ -7,14 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/chrisrob11/ancestrydl/pkg/ancestry"
 	"github.com/chrisrob11/ancestrydl/pkg/config"
 	"github.com/urfave/cli/v2"
-	"golang.org/x/text/runes"
-	"golang.org/x/text/transform"
-	"golang.org/x/text/unicode/norm"
 )
 
 const (
@@ -129,10 +125,10 @@ func fetchTreeData(apiClient *ancestry.APIClient, treeID string) ([]ancestry.Per
 
 // saveTreeOutput saves all tree data, media, and generates the HTML viewer
 func saveTreeOutput(apiClient *ancestry.APIClient, treeID, outputDir string, treeInfo *ancestry.TreeInfo,
-	allPersons []ancestry.Person, relationships map[string]PersonRelationship) (int, error) {
+	allPersons []ancestry.Person, relationships map[string]PersonRelationship) (int, int, error) {
 	fmt.Println("8. Creating output directories...")
 	if err := createDirectoryStructure(outputDir); err != nil {
-		return 0, fmt.Errorf("failed to create directories: %w", err)
+		return 0, 0, fmt.Errorf("failed to create directories: %w", err)
 	}
 	fmt.Println("   ✓ Directories created")
 
@@ -140,7 +136,11 @@ func saveTreeOutput(apiClient *ancestry.APIClient, treeID, outputDir string, tre
 	mediaIndex, downloadCount := downloadAllMedia(apiClient, treeID, allPersons, outputDir)
 	fmt.Printf("   ✓ Downloaded %d media files\n", downloadCount)
 
-	fmt.Println("10. Saving tree data...")
+	fmt.Println("10. Downloading record images (census, vital records, etc.)...")
+	recordIndex, recordCount := downloadAllRecordImages(apiClient, treeID, allPersons, outputDir)
+	fmt.Printf("   ✓ Downloaded %d record images\n", recordCount)
+
+	fmt.Println("11. Saving tree data...")
 	treeExport := TreeExport{
 		TreeID:      treeID,
 		TreeName:    treeInfo.TreeName,
@@ -150,23 +150,23 @@ func saveTreeOutput(apiClient *ancestry.APIClient, treeID, outputDir string, tre
 		TreeInfo:    treeInfo,
 	}
 
-	if err := saveTreeData(outputDir, &treeExport, relationships, mediaIndex); err != nil {
-		return 0, fmt.Errorf("failed to save tree data: %w", err)
+	if err := saveTreeData(outputDir, &treeExport, relationships, mediaIndex, recordIndex); err != nil {
+		return 0, 0, fmt.Errorf("failed to save tree data: %w", err)
 	}
 	fmt.Println("   ✓ Tree data saved")
 
-	fmt.Println("11. Generating HTML viewer...")
+	fmt.Println("12. Generating HTML viewer...")
 	if err := generateHTMLViewer(outputDir, &treeExport); err != nil {
 		fmt.Printf("   Warning: Failed to generate HTML viewer: %v\n", err)
 	} else {
 		fmt.Println("   ✓ HTML viewer created")
 	}
 
-	return downloadCount, nil
+	return downloadCount, recordCount, nil
 }
 
 // printDownloadSummary prints the summary of downloaded tree data
-func printDownloadSummary(outputDir string, downloadCount int) {
+func printDownloadSummary(outputDir string, downloadCount, recordCount int) {
 	fmt.Println("\n✅ Tree download complete!")
 	fmt.Printf("   Output: %s\n", outputDir)
 	fmt.Println()
@@ -175,8 +175,11 @@ func printDownloadSummary(outputDir string, downloadCount int) {
 	fmt.Println("  • people.json - All persons with readable details")
 	fmt.Println("  • metadata.json - Tree information")
 	if downloadCount > 0 {
-		fmt.Printf("  • media/ - %d media files (photos, documents)\n", downloadCount)
+		fmt.Printf("  • media/photos/ - %d media files (photos, documents)\n", downloadCount)
 		fmt.Println("  • media-index.json - Media file index with titles and descriptions")
+	}
+	if recordCount > 0 {
+		fmt.Printf("  • media/records/ - %d record images (census, vital records)\n", recordCount)
 	}
 	fmt.Println()
 	fmt.Printf("👉 To view your tree, open: %s/index.html\n", outputDir)
@@ -226,12 +229,12 @@ func DownloadTree(c *cli.Context) error {
 		return err
 	}
 
-	downloadCount, err := saveTreeOutput(apiClient, treeID, outputDir, treeInfo, allPersons, relationships)
+	downloadCount, recordCount, err := saveTreeOutput(apiClient, treeID, outputDir, treeInfo, allPersons, relationships)
 	if err != nil {
 		return err
 	}
 
-	printDownloadSummary(outputDir, downloadCount)
+	printDownloadSummary(outputDir, downloadCount, recordCount)
 
 	return nil
 }
@@ -431,7 +434,7 @@ func convertEventToReadableFormat(event ancestry.Event) map[string]interface{} {
 
 // convertPersonToReadableFormat converts a person to a readable map with relationships and media
 func convertPersonToReadableFormat(person ancestry.Person, relationships map[string]PersonRelationship,
-	mediaIndex map[string]PersonMediaInfo) map[string]interface{} {
+	mediaIndex map[string]PersonMediaInfo, recordIndex map[string]PersonRecordInfo) map[string]interface{} {
 	personID := person.GetPersonID()
 	readable := map[string]interface{}{
 		"personId": personID,
@@ -477,15 +480,20 @@ func convertPersonToReadableFormat(person ancestry.Person, relationships map[str
 		readable["media"] = mediaInfo.Files
 	}
 
+	// Add record images (census, vital records, etc.)
+	if recordInfo, hasRecords := recordIndex[personID]; hasRecords && len(recordInfo.Records) > 0 {
+		readable["recordImages"] = recordInfo.Records
+	}
+
 	return readable
 }
 
 // savePersonsData saves persons to a JSON file in readable format
 func savePersonsData(outputDir string, persons []ancestry.Person, relationships map[string]PersonRelationship,
-	mediaIndex map[string]PersonMediaInfo) error {
+	mediaIndex map[string]PersonMediaInfo, recordIndex map[string]PersonRecordInfo) error {
 	readablePersons := make([]map[string]interface{}, 0, len(persons))
 	for _, person := range persons {
-		readablePersons = append(readablePersons, convertPersonToReadableFormat(person, relationships, mediaIndex))
+		readablePersons = append(readablePersons, convertPersonToReadableFormat(person, relationships, mediaIndex, recordIndex))
 	}
 
 	readableJSON, err := json.MarshalIndent(readablePersons, "", "  ")
@@ -524,8 +532,8 @@ func saveMetadata(outputDir string, treeExport *TreeExport) error {
 	return nil
 }
 
-func saveTreeData(outputDir string, treeExport *TreeExport, relationships map[string]PersonRelationship, mediaIndex map[string]PersonMediaInfo) error {
-	if err := savePersonsData(outputDir, treeExport.Persons, relationships, mediaIndex); err != nil {
+func saveTreeData(outputDir string, treeExport *TreeExport, relationships map[string]PersonRelationship, mediaIndex map[string]PersonMediaInfo, recordIndex map[string]PersonRecordInfo) error {
+	if err := savePersonsData(outputDir, treeExport.Persons, relationships, mediaIndex, recordIndex); err != nil {
 		return err
 	}
 
@@ -757,19 +765,6 @@ func inferEventTypes(persons []ancestry.Person, relationships map[string]PersonR
 	return inferredCount
 }
 
-// getFileExtension extracts extension from URL, removing query parameters
-func getFileExtension(url string) string {
-	urlPath := url
-	if qPos := strings.Index(urlPath, "?"); qPos != -1 {
-		urlPath = urlPath[:qPos]
-	}
-	ext := filepath.Ext(urlPath)
-	if ext == "" {
-		ext = ".jpg"
-	}
-	return ext
-}
-
 // getShortPersonID returns person ID without colon-separated segments
 func getShortPersonID(personID string) string {
 	if colonPos := strings.Index(personID, ":"); colonPos != -1 {
@@ -779,22 +774,28 @@ func getShortPersonID(personID string) string {
 }
 
 // generateMediaFilename creates a readable filename for media items
-func generateMediaFilename(personName, personID string, mediaItem ancestry.PrimaryMediaItem, idx int, ext string) string {
+func generateMediaFilename(personName, personID string, mediaItem ancestry.PrimaryMediaItem, idx int) string {
 	shortPersonID := getShortPersonID(personID)
 	safeName := sanitizeFilename(personName)
 	if safeName == "" {
 		safeName = "unknown"
 	}
 
+	title := ""
 	if mediaItem.Subcategory != "" {
-		safeSubcategory := sanitizeFilename(mediaItem.Subcategory)
-		return fmt.Sprintf("%s-%s-%s-%03d%s", safeName, shortPersonID, safeSubcategory, idx+1, ext)
+		title = mediaItem.Subcategory
+	} else if mediaItem.Title != "" {
+		title = mediaItem.Title
 	}
-	if mediaItem.Title != "" {
-		safeTitle := sanitizeFilename(mediaItem.Title)
-		return fmt.Sprintf("%s-%s-%s-%03d%s", safeName, shortPersonID, safeTitle, idx+1, ext)
+
+	// The extension is now determined by the downloadAndSaveMediaItem-like logic
+	// and will be appended when saving the file.
+	// So, we just generate the base name here.
+	if title != "" {
+		safeTitle := sanitizeFilename(title)
+		return fmt.Sprintf("%s-%s-%s-%03d", safeName, shortPersonID, safeTitle, idx+1)
 	}
-	return fmt.Sprintf("%s-%s-%03d%s", safeName, shortPersonID, idx+1, ext)
+	return fmt.Sprintf("%s-%s-%03d", safeName, shortPersonID, idx+1)
 }
 
 // getMediaSubdirectory determines subdirectory based on media category
@@ -808,8 +809,8 @@ func getMediaSubdirectory(category string) string {
 // processMediaItem downloads and saves a single media item
 func processMediaItem(apiClient *ancestry.APIClient, mediaItem ancestry.PrimaryMediaItem, personID, personName string,
 	idx int, outputDir string) (MediaFileInfo, bool, error) {
-	ext := getFileExtension(mediaItem.URL)
-	filename := generateMediaFilename(personName, personID, mediaItem, idx, ext)
+
+	filename := generateMediaFilename(personName, personID, mediaItem, idx)
 	subdir := getMediaSubdirectory(mediaItem.Category)
 
 	filePath := filepath.Join(outputDir, "media", subdir, filename)
@@ -830,16 +831,48 @@ func processMediaItem(apiClient *ancestry.APIClient, mediaItem ancestry.PrimaryM
 		return mediaFileInfo, false, nil
 	}
 
-	// Download the file
-	fileData, err := apiClient.DownloadFile(mediaItem.URL)
-	if err != nil {
-		return mediaFileInfo, false, fmt.Errorf("download failed: %w", err)
+	namespaceToUse, mediaGUIDToUse, ok := ExtractMediaDetailsFromURL(mediaItem.URL)
+	var fileData []byte
+	var err error
+
+	if !ok {
+		// Fallback to old download method if namespace/GUID cannot be extracted
+		fileData, err = apiClient.DownloadFile(mediaItem.URL)
+		if err != nil {
+			return mediaFileInfo, false, fmt.Errorf("fallback download failed for %s: %w", mediaItem.URL, err)
+		}
+	} else {
+		// Download using GetMediaImage
+		fileData, err = apiClient.GetMediaImage(namespaceToUse, mediaGUIDToUse, 0, 0) // 0,0 for largest
+		if err != nil {
+			// Fallback to old download method if GetMediaImage fails
+			fmt.Printf("   [Warning] GetMediaImage failed for %s (namespace: %s, GUID: %s): %v. Falling back to direct download.\n", mediaItem.URL, namespaceToUse, mediaGUIDToUse, err)
+			fileData, err = apiClient.DownloadFile(mediaItem.URL)
+			if err != nil {
+				return mediaFileInfo, false, fmt.Errorf("fallback download failed after GetMediaImage failure for %s: %w", mediaItem.URL, err)
+			}
+		}
 	}
 
-	// Save the file
-	if err := os.WriteFile(filePath, fileData, 0644); err != nil {
-		return mediaFileInfo, false, fmt.Errorf("save failed: %w", err)
+	// Detect file extension from downloaded data
+	ext := DetectFileExtension(fileData)
+	filenameWithExt := filename + ext
+	filePathWithExt := filepath.Join(outputDir, "media", subdir, filenameWithExt)
+	relativeFilePathWithExt := filepath.Join("media", subdir, filenameWithExt)
+
+	// Check if file with extension already exists
+	if _, err := os.Stat(filePathWithExt); err == nil {
+		mediaFileInfo.FilePath = relativeFilePathWithExt
+		return mediaFileInfo, false, nil
 	}
+
+	// Save the file with proper extension
+	if err := os.WriteFile(filePathWithExt, fileData, 0644); err != nil {
+		return mediaFileInfo, false, fmt.Errorf("save failed for %s: %w", filenameWithExt, err)
+	}
+
+	// Update the media file info with the actual filepath including extension
+	mediaFileInfo.FilePath = relativeFilePathWithExt
 
 	return mediaFileInfo, true, nil
 }
@@ -888,6 +921,86 @@ func processPersonMedia(apiClient *ancestry.APIClient, treeID string, person anc
 	return personInfo, downloaded, nil
 }
 
+// RecordImageInfo contains information about a downloaded record image
+type RecordImageInfo struct {
+	FilePath    string `json:"filePath"`
+	SourceTitle string `json:"sourceTitle"`
+	CitationID  string `json:"citationId"`
+	DatabaseID  string `json:"databaseId"`
+	RecordID    string `json:"recordId"`
+}
+
+// PersonRecordInfo tracks record images for a person
+type PersonRecordInfo struct {
+	PersonID string            `json:"personId"`
+	Records  []RecordImageInfo `json:"records"`
+}
+
+// downloadAllRecordImages downloads census and vital record images from sources
+func downloadAllRecordImages(apiClient *ancestry.APIClient, treeID string, persons []ancestry.Person, outputDir string) (map[string]PersonRecordInfo, int) {
+	recordIndex := make(map[string]PersonRecordInfo)
+	totalDownloaded := 0
+	recordMediaDir := filepath.Join(outputDir, "media", "records")
+
+	// Create records directory
+	if err := os.MkdirAll(recordMediaDir, 0755); err != nil {
+		fmt.Printf("   [Warning] Failed to create records directory: %v\n", err)
+		return recordIndex, 0
+	}
+
+	for i, person := range persons {
+		personID := person.GetPersonID()
+
+		if personID == "" {
+			continue
+		}
+
+		if i%10 == 0 {
+			fmt.Printf("   Processing sources for person %d/%d...\n", i+1, len(persons))
+		}
+
+		// Fetch sources for this person
+		researchData, err := apiClient.GetPersonFactsFromHTML(treeID, personID)
+		if err != nil || researchData == nil {
+			continue
+		}
+
+		personRecords := []RecordImageInfo{}
+
+		// Download record images from PersonSources
+		for _, source := range researchData.PersonSources {
+			if source.RecordImageUrl == "" {
+				continue
+			}
+
+			localPath, err := DownloadAndSaveRecordImage(nil, nil, apiClient, source.RecordImageUrl, source.CitationId, recordMediaDir, "media/records")
+			if err != nil || localPath == "" {
+				continue
+			}
+
+			// Add to person's record list
+			personRecords = append(personRecords, RecordImageInfo{
+				FilePath:    localPath,
+				SourceTitle: source.Title,
+				CitationID:  source.CitationId,
+				DatabaseID:  source.DatabaseId,
+				RecordID:    source.RecordId,
+			})
+
+			totalDownloaded++
+		}
+
+		if len(personRecords) > 0 {
+			recordIndex[personID] = PersonRecordInfo{
+				PersonID: personID,
+				Records:  personRecords,
+			}
+		}
+	}
+
+	return recordIndex, totalDownloaded
+}
+
 // downloadAllMedia downloads all media files for all persons
 func downloadAllMedia(apiClient *ancestry.APIClient, treeID string, persons []ancestry.Person, outputDir string) (map[string]PersonMediaInfo, int) {
 	mediaIndex := make(map[string]PersonMediaInfo)
@@ -930,64 +1043,6 @@ func downloadAllMedia(apiClient *ancestry.APIClient, treeID string, persons []an
 	}
 
 	return mediaIndex, totalDownloaded
-}
-
-// sanitizeFilename removes or replaces characters that are invalid in filenames
-func sanitizeFilename(name string) string {
-	// Transliterate Unicode characters to ASCII
-	// This uses NFD (canonical decomposition) to separate base characters from accents,
-	// then removes combining marks (accents, tildes, etc.), leaving just base characters
-	// Example: ã (U+00E3) → a (U+0061) + ̃ (U+0303) → a (U+0061)
-	t := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
-	result, _, err := transform.String(t, name)
-	if err != nil {
-		// If transliteration fails, use original name
-		result = name
-	}
-	name = result
-
-	// Replace spaces with underscores
-	name = strings.ReplaceAll(name, " ", "_")
-
-	// Remove or replace Windows-forbidden and problematic characters
-	// Windows forbidden: \ / : * ? " < > |
-	replacer := strings.NewReplacer(
-		"/", "-",
-		"\\", "-",
-		":", "-",
-		"*", "",
-		"?", "",
-		"\"", "",
-		"<", "",
-		">", "",
-		"|", "",
-		".", "",
-	)
-	name = replacer.Replace(name)
-
-	// Remove any remaining non-ASCII characters as a safety measure
-	var builder strings.Builder
-	for _, r := range name {
-		if r < 128 && (r == '_' || r == '-' || (r >= '0' && r <= '9') || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z')) {
-			builder.WriteRune(r)
-		}
-	}
-	name = builder.String()
-
-	// Limit length to avoid filesystem issues (Windows has 260-char path limit)
-	if len(name) > 50 {
-		name = name[:50]
-	}
-
-	// Trim any trailing hyphens or underscores
-	name = strings.Trim(name, "-_")
-
-	// Ensure the name is not empty
-	if name == "" {
-		name = "unnamed"
-	}
-
-	return name
 }
 
 // generateHTMLViewer creates a self-contained HTML viewer with embedded data

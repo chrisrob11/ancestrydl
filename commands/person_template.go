@@ -50,7 +50,7 @@ func generatePersonPageTemplate(peopleJSON, metadataJSON string) string {
 
         h1 {
             color: #2c3e50;
-            margin-bottom: 10px;
+            margin-bottom: 5px;
             font-size: 2.5em;
         }
 
@@ -58,6 +58,28 @@ func generatePersonPageTemplate(peopleJSON, metadataJSON string) string {
             color: #95a5a6;
             font-size: 0.9em;
             margin-bottom: 20px;
+        }
+
+        .hero-section {
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .vital-stats {
+            font-size: 1.2em;
+            color: #555;
+            margin: 10px 0;
+        }
+
+        .vital-stats .icon {
+            margin-right: 8px;
+        }
+
+        .location-info {
+            font-size: 1em;
+            color: #666;
+            margin: 8px 0;
         }
 
         .section {
@@ -157,6 +179,108 @@ func generatePersonPageTemplate(peopleJSON, metadataJSON string) string {
             background: #27ae60;
         }
 
+        .badge.record {
+            background: #f39c12;
+        }
+
+        .sources-section {
+            margin-top: 30px;
+        }
+
+        .sources-list {
+            list-style: none;
+            padding: 0;
+            margin: 15px 0;
+        }
+
+        .source-item {
+            display: flex;
+            align-items: flex-start;
+            padding: 15px;
+            margin-bottom: 10px;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            transition: box-shadow 0.2s;
+        }
+
+        .source-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .source-icon {
+            width: 48px;
+            height: 48px;
+            min-width: 48px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            font-size: 24px;
+        }
+
+        .source-icon.document {
+            background: #fff4e6;
+            color: #f39c12;
+        }
+
+        .source-icon.tree {
+            background: #e8f5e9;
+            color: #4caf50;
+        }
+
+        .source-content {
+            flex: 1;
+        }
+
+        .source-title {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 5px;
+            font-size: 1.05em;
+        }
+
+        .source-meta {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .source-thumbnail {
+            max-width: 150px;
+            margin-left: 15px;
+            cursor: pointer;
+            border-radius: 4px;
+            border: 2px solid #e0e0e0;
+            transition: transform 0.2s;
+        }
+
+        .source-thumbnail:hover {
+            transform: scale(1.05);
+            border-color: #f39c12;
+        }
+
+        .source-count {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .two-column-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        @media (max-width: 900px) {
+            .two-column-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .event-list {
             list-style: none;
         }
@@ -224,7 +348,10 @@ func generatePersonPageTemplate(peopleJSON, metadataJSON string) string {
 
         <div class="section" id="basic-info"></div>
         <div class="section" id="relationships"></div>
-        <div class="section" id="events"></div>
+        <div class="two-column-container">
+            <div class="section" id="events"></div>
+            <div class="section sources-section" id="sources"></div>
+        </div>
         <div class="section" id="media"></div>
     </div>
 
@@ -547,6 +674,58 @@ func generatePersonPageTemplate(peopleJSON, metadataJSON string) string {
             document.getElementById('media').innerHTML = mediaHTML;
         } else {
             document.getElementById('media').style.display = 'none';
+        }
+
+        // Sources Section (Census, Vital Records, etc.)
+        if (person.recordImages && person.recordImages.length > 0) {
+            let sourcesHTML = '<h2>Sources (' + person.recordImages.length + ')</h2>';
+            sourcesHTML += '<ul class="sources-list">';
+
+            person.recordImages.forEach(record => {
+                const recordMetadata = [record.sourceTitle, 'Citation ID: ' + record.citationId].filter(x => x).join(' | ');
+
+                // Determine icon based on database or source type
+                let icon = '📄';
+                let iconClass = 'document';
+                if (record.sourceTitle && (record.sourceTitle.includes('Census') || record.sourceTitle.includes('census'))) {
+                    icon = '👥';
+                    iconClass = 'document';
+                } else if (record.sourceTitle && (record.sourceTitle.includes('Marriage') || record.sourceTitle.includes('Birth') || record.sourceTitle.includes('Death'))) {
+                    icon = '📋';
+                    iconClass = 'document';
+                } else if (record.sourceTitle && (record.sourceTitle.includes('Tree') || record.sourceTitle.includes('Family'))) {
+                    icon = '🌳';
+                    iconClass = 'tree';
+                }
+
+                sourcesHTML += '<li class="source-item">';
+                sourcesHTML += '<div class="source-icon ' + iconClass + '">' + icon + '</div>';
+                sourcesHTML += '<div class="source-content">';
+                sourcesHTML += '<div class="source-title">' + (record.sourceTitle || 'Unknown Source') + '</div>';
+
+                let metaParts = [];
+                if (record.databaseId) {
+                    metaParts.push('Database: ' + record.databaseId);
+                }
+                if (record.recordId) {
+                    metaParts.push('Record: ' + record.recordId);
+                }
+                if (metaParts.length > 0) {
+                    sourcesHTML += '<div class="source-meta">' + metaParts.join(' • ') + '</div>';
+                }
+
+                sourcesHTML += '</div>';
+
+                // Add thumbnail preview
+                sourcesHTML += '<img src="' + record.filePath + '" class="source-thumbnail" alt="' + record.sourceTitle + '" onclick=\'openLightbox("' + record.filePath + '", ' + JSON.stringify(recordMetadata).replace(/'/g, "&apos;") + ')\'>';
+
+                sourcesHTML += '</li>';
+            });
+
+            sourcesHTML += '</ul>';
+            document.getElementById('sources').innerHTML = sourcesHTML;
+        } else {
+            document.getElementById('sources').style.display = 'none';
         }
 
         function formatDate(date) {
